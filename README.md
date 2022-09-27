@@ -1,0 +1,1 @@
+# sz_rabbit_consumer
