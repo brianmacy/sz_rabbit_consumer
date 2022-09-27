@@ -3,10 +3,10 @@
 import concurrent.futures
 
 import argparse
-import pathlib
 import orjson
-import itertools
+import logging
 
+import importlib
 import sys
 import os
 import time
@@ -18,6 +18,8 @@ INTERVAL=10000
 
 MSG_FRAME = 0
 MSG_BODY = 2
+
+log_format = '%(asctime)s %(message)s'
 
 def process_msg(engine, msg, info):
   try:
@@ -35,6 +37,22 @@ def process_msg(engine, msg, info):
 
 
 try:
+  log_level_map = {
+      "notset": logging.NOTSET,
+      "debug": logging.DEBUG,
+      "info": logging.INFO,
+      "fatal": logging.FATAL,
+      "warning": logging.WARNING,
+      "error": logging.ERROR,
+      "critical": logging.CRITICAL
+  }
+
+  log_level_parameter = os.getenv("SENZING_LOG_LEVEL", "info").lower()
+  log_level = log_level_map.get(log_level_parameter, logging.INFO)
+  logging.basicConfig(format=log_format, level=log_level)
+  logging.getLogger("pika").setLevel(logging.WARNING)
+
+
   parser = argparse.ArgumentParser()
   parser.add_argument('url')
   parser.add_argument('-q', '--queue', dest='queue', required=True, help='source queue')
@@ -53,10 +71,13 @@ try:
   g2.init("sz_rabbit_consumer",engine_config,args.debugTrace)
   prevTime = time.time()
 
+  senzing_governor = importlib.import_module("senzing_governor")
+  governor = senzing_governor.Governor(hint="sz_rabbit_consumer")
+
   params = pika.URLParameters(args.url)
   with pika.BlockingConnection(params) as conn:
     messages = 0
-    max_workers = None
+    max_workers = os.getenv('SENZING_THREADS_PER_PROCESS', None)
     ch = conn.channel();
     ch.queue_declare(queue=args.queue, passive=True)
     ch.basic_qos(prefetch_count=100)
@@ -88,9 +109,11 @@ try:
                 print(f'\n{response.decode()}\n')
 
           #Really want something that forces an "I'm alive" to the server
+          pauseSeconds = governor.govern()
 
-          while len(futures) < executor._max_workers:
+          while pauseSeconds >= 0 and len(futures) < executor._max_workers:
             try:
+              time.sleep(pauseSeconds)
               msg = ch.basic_get(args.queue)
               #print(msg)
               if not msg[MSG_FRAME]:
