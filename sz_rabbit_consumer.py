@@ -5,6 +5,7 @@ import concurrent.futures
 import argparse
 import orjson
 import logging
+import traceback
 
 import importlib
 import sys
@@ -77,14 +78,17 @@ try:
   params = pika.URLParameters(args.url)
   with pika.BlockingConnection(params) as conn:
     messages = 0
-    max_workers = os.getenv('SENZING_THREADS_PER_PROCESS', None)
+    max_workers = None
+    threads_per_process = os.getenv('SENZING_THREADS_PER_PROCESS', None)
+    if threads_per_process:
+      max_workers = int(threads_per_process)
     ch = conn.channel();
     ch.queue_declare(queue=args.queue, passive=True)
-    ch.basic_qos(prefetch_count=100)
 
-    try:
-      with concurrent.futures.ThreadPoolExecutor(None) as executor:
-        futures = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers) as executor:
+      futures = {}
+      try:
+        ch.basic_qos(prefetch_count=executor._max_workers) # always have 1 record prefetched for each thread
         while True:
 
           if futures:
@@ -110,28 +114,44 @@ try:
 
           #Really want something that forces an "I'm alive" to the server
           pauseSeconds = governor.govern()
+          # either governor fully triggered or our executor is full
+          # not going to get more messages
+          if pauseSeconds < 0:
+            conn.process_data_events(1) # process rabbitmq protocol for 1s
+            continue
+          if len(futures) >= executor._max_workers:
+            conn.process_data_events(0) # process rabbitmq protocol just once
+            continue
 
-          while pauseSeconds >= 0 and len(futures) < executor._max_workers:
+          while len(futures) < executor._max_workers:
             try:
-              time.sleep(pauseSeconds)
+              if pauseSeconds > 0:
+                conn.sleep(pauseSeconds)
               msg = ch.basic_get(args.queue)
               #print(msg)
-              if not msg[MSG_FRAME]:
-                time.sleep(.1)
+              if not msg[MSG_FRAME] and not len(futures):
+                conn.sleep(.1)
                 break
               futures[executor.submit(process_msg, g2, msg[MSG_BODY], args.info)] = msg
             except Exception as err:
               print(f'{type(err).__name__}: {err}', file=sys.stderr)
               raise
 
-      print(f'Processed total of {messages} adds')
+        print(f'Processed total of {messages} adds')
 
-    except Exception as err:
-      print(f'{type(err).__name__}: Shutting down due to error: {err}', file=sys.stderr)
-      executor.shutdown()
-      conn.close()
-      exit(-1)
+      except Exception as err:
+        print(f'{type(err).__name__}: Shutting down due to error: {err}', file=sys.stderr)
+        traceback.print_exc()
+        for fut, msg in futures.items():
+          if not fut.done():
+            record = orjson.loads(msg[MSG_BODY])
+            print(f'Still processing: {record["DATA_SOURCE"]} : {record["RECORD_ID"]}')
+        executor.shutdown()
+        conn.close()
+        exit(-1)
 
 except Exception as err:
   print(err, file=sys.stderr)
-  exit(-1)	
+  traceback.print_exc()
+  exit(-1)
+

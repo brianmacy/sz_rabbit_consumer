@@ -251,7 +251,7 @@ class Governor:
         #  modified to fit required performance characteristics.
         # <ratio>:<time in seconds>
         self.step_ratios = [
-            (1.0, 100),
+            (1.0, -1),
             (0.8, 100),
             (0.4, 10),
             (0.2, 1),
