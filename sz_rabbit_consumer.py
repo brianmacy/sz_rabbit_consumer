@@ -131,7 +131,7 @@ try:
                   if duration > 2*LONG_RECORD: # a record taking this long should be rejected to the dead letter queue
                     numRejected += 1
                     if not msg[TUPLE_ACKED]:
-                      print(f'reject')
+                      print(f'REJECTING: {record["DATA_SOURCE"]} : {record["RECORD_ID"]}')
                       ch.basic_reject(msg[TUPLE_MSG][MSG_FRAME].delivery_tag, requeue=False)
                       futures[fut] = (msg[TUPLE_MSG],msg[TUPLE_STARTTIME], True)
                       msg = futures[fut]
@@ -142,7 +142,7 @@ try:
                 if numStuck >= executor._max_workers:
                   print(f'All {executor._max_workers} threads are stuck on long running records')
                 if numRejected >= executor._max_workers:
-                  print(f'running recovery')
+                  print(f'Running recovery')
                   ch.basic_recover() # supposedly this causes unacked messages to redeliver, should prevent the server from disconnecting us
 
           #Really want something that forces an "I'm alive" to the server
