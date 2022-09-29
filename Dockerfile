@@ -1,7 +1,7 @@
 # docker build -t brian/sz_rabbit_consumer .
 # docker run --user $UID -it -v $PWD:/data -e SENZING_ENGINE_CONFIGURATION_JSON brian/sz_rabbit_consumer
 
-ARG BASE_IMAGE=senzing/senzingapi-runtime:staging
+ARG BASE_IMAGE=senzing/senzingapi-runtime:latest
 FROM ${BASE_IMAGE}
 
 ENV REFRESHED_AT=2022-08-27

@@ -16,9 +16,14 @@ import pika
 
 from senzing import G2Engine, G2Exception, G2EngineFlags
 INTERVAL=10000
+LONG_RECORD=300
 
 MSG_FRAME = 0
 MSG_BODY = 2
+
+TUPLE_MSG = 0
+TUPLE_STARTTIME = 1
+TUPLE_ACKED = 2
 
 log_format = '%(asctime)s %(message)s'
 
@@ -70,7 +75,7 @@ try:
   # Initialize the G2Engine
   g2 = G2Engine()
   g2.init("sz_rabbit_consumer",engine_config,args.debugTrace)
-  prevTime = time.time()
+  logCheckTime = prevTime = time.time()
 
   senzing_governor = importlib.import_module("senzing_governor")
   governor = senzing_governor.Governor(hint="sz_rabbit_consumer")
@@ -91,6 +96,7 @@ try:
         ch.basic_qos(prefetch_count=executor._max_workers) # always have 1 record prefetched for each thread
         while True:
 
+          nowTime = time.time()
           if futures:
             done, _ = concurrent.futures.wait(futures, timeout=10, return_when=concurrent.futures.FIRST_COMPLETED)
 
@@ -99,40 +105,67 @@ try:
               if result:
                 print(result) # we would handle pushing to withinfo queues here BUT that is likely a second future task/executor
               msg = futures.pop(fut)
-              ch.basic_ack(msg[MSG_FRAME].delivery_tag)
+              if not msg[TUPLE_ACKED]: # if we rejected a message before we should not ack it here
+                ch.basic_ack(msg[TUPLE_MSG][MSG_FRAME].delivery_tag)
               messages+=1
 
-              if messages%INTERVAL == 0:
-                nowTime = time.time()
-                speed = int(INTERVAL / (nowTime-prevTime))
+              if messages%INTERVAL == 0: # display rate stats
+                diff = nowTime-prevTime
+                speed = -1
+                if diff > 0.0:
+                  int(INTERVAL / diff)
                 print(f'Processed {messages} adds, {speed} records per second')
                 prevTime=nowTime
-              if messages%100000 == 0:
+              if messages%100000 == 0: # display engine stats
                 response = bytearray()
                 g2.stats(response)
                 print(f'\n{response.decode()}\n')
+
+            if nowTime > logCheckTime+(LONG_RECORD/2): # log long running records
+              logCheckTime = nowTime
+              numStuck = 0
+              numRejected = 0
+              for fut, msg in futures.items():
+                if not fut.done():
+                  duration = nowTime-msg[TUPLE_STARTTIME]
+                  if duration > 2*LONG_RECORD: # a record taking this long should be rejected to the dead letter queue
+                    numRejected += 1
+                    if not msg[TUPLE_ACKED]:
+                      print(f'reject')
+                      ch.basic_reject(msg[TUPLE_MSG][MSG_FRAME].delivery_tag, requeue=False)
+                      futures[fut] = (msg[TUPLE_MSG],msg[TUPLE_STARTTIME], True)
+                      msg = futures[fut]
+                  if duration > LONG_RECORD:
+                    numStuck += 1
+                    record = orjson.loads(msg[TUPLE_MSG][MSG_BODY])
+                    print(f'Still processing ({duration/60:.3g} min, rejected: {msg[TUPLE_ACKED]}): {record["DATA_SOURCE"]} : {record["RECORD_ID"]}')
+                if numStuck >= executor._max_workers:
+                  print(f'All {executor._max_workers} threads are stuck on long running records')
+                if numRejected >= executor._max_workers:
+                  print(f'running recovery')
+                  ch.basic_recover() # supposedly this causes unacked messages to redeliver, should prevent the server from disconnecting us
 
           #Really want something that forces an "I'm alive" to the server
           pauseSeconds = governor.govern()
           # either governor fully triggered or our executor is full
           # not going to get more messages
-          if pauseSeconds < 0:
-            conn.process_data_events(1) # process rabbitmq protocol for 1s
+          if pauseSeconds < 0.0:
+            conn.sleep(1) # process rabbitmq protocol for 1s
             continue
           if len(futures) >= executor._max_workers:
-            conn.process_data_events(0) # process rabbitmq protocol just once
+            conn.sleep(1) # process rabbitmq protocol for 1s
             continue
+          if pauseSeconds > 0.0:
+            conn.sleep(pauseSeconds)
 
           while len(futures) < executor._max_workers:
             try:
-              if pauseSeconds > 0:
-                conn.sleep(pauseSeconds)
               msg = ch.basic_get(args.queue)
               #print(msg)
               if not msg[MSG_FRAME] and not len(futures):
                 conn.sleep(.1)
                 break
-              futures[executor.submit(process_msg, g2, msg[MSG_BODY], args.info)] = msg
+              futures[executor.submit(process_msg, g2, msg[MSG_BODY], args.info)] = (msg,time.time(),False)
             except Exception as err:
               print(f'{type(err).__name__}: {err}', file=sys.stderr)
               raise
@@ -142,10 +175,12 @@ try:
       except Exception as err:
         print(f'{type(err).__name__}: Shutting down due to error: {err}', file=sys.stderr)
         traceback.print_exc()
+        nowTime = time.time()
         for fut, msg in futures.items():
           if not fut.done():
-            record = orjson.loads(msg[MSG_BODY])
-            print(f'Still processing: {record["DATA_SOURCE"]} : {record["RECORD_ID"]}')
+            duration = nowTime-msg[TUPLE_STARTTIME]
+            record = orjson.loads(msg[TUPLE_MSG][MSG_BODY])
+            print(f'Still processing ({duration/60:.3g} min, rejected: {msg[TUPLE_ACKED]}): {record["DATA_SOURCE"]} : {record["RECORD_ID"]}')
         executor.shutdown()
         conn.close()
         exit(-1)
