@@ -113,7 +113,7 @@ try:
                 diff = nowTime-prevTime
                 speed = -1
                 if diff > 0.0:
-                  int(INTERVAL / diff)
+                  speed = int(INTERVAL / diff)
                 print(f'Processed {messages} adds, {speed} records per second')
                 prevTime=nowTime
               if messages%100000 == 0: # display engine stats
