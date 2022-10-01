@@ -116,13 +116,14 @@ try:
                   speed = int(INTERVAL / diff)
                 print(f'Processed {messages} adds, {speed} records per second')
                 prevTime=nowTime
-              if messages%100000 == 0: # display engine stats
-                response = bytearray()
-                g2.stats(response)
-                print(f'\n{response.decode()}\n')
 
             if nowTime > logCheckTime+(LONG_RECORD/2): # log long running records
               logCheckTime = nowTime
+
+              response = bytearray()
+              g2.stats(response)
+              print(f'\n{response.decode()}\n')
+
               numStuck = 0
               numRejected = 0
               for fut, msg in futures.items():
