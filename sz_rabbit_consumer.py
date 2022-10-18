@@ -163,8 +163,9 @@ try:
             try:
               msg = ch.basic_get(args.queue)
               #print(msg)
-              if not msg[MSG_FRAME] and not len(futures):
-                conn.sleep(.1)
+              if not msg[MSG_FRAME]:
+                if len(futures) == 0:
+                  conn.sleep(.1)
                 break
               futures[executor.submit(process_msg, g2, msg[MSG_BODY], args.info)] = (msg,time.time(),False)
             except Exception as err:
