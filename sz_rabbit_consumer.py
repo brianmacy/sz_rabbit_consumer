@@ -132,6 +132,7 @@ try:
                   if duration > 2*LONG_RECORD: # a record taking this long should be rejected to the dead letter queue
                     numRejected += 1
                     if not msg[TUPLE_ACKED]:
+                      record = orjson.loads(msg[TUPLE_MSG][MSG_BODY])
                       print(f'REJECTING: {record["DATA_SOURCE"]} : {record["RECORD_ID"]}')
                       ch.basic_reject(msg[TUPLE_MSG][MSG_FRAME].delivery_tag, requeue=False)
                       futures[fut] = (msg[TUPLE_MSG],msg[TUPLE_STARTTIME], True)
