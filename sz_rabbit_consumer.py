@@ -152,14 +152,17 @@ try:
                                 ]:  # if we rejected a message before we should not ack it here
                                     ch.basic_ack(msg[TUPLE_MSG][MSG_FRAME].delivery_tag)
                             except (G2RetryTimeoutExceeded, G2BadInputException) as err:
-                                record = orjson.loads(msg[TUPLE_MSG][MSG_BODY])
-                                print(
-                                    f'REJECTING due to bad data or timeout: {record["DATA_SOURCE"]} : {record["RECORD_ID"]}'
-                                )
-                                ch.basic_reject(
-                                    msg[TUPLE_MSG][MSG_FRAME].delivery_tag,
-                                    requeue=False,
-                                )
+                                if not msg[
+                                    TUPLE_ACKED
+                                ]:  # if we rejected a message before we should not ack it here
+                                  record = orjson.loads(msg[TUPLE_MSG][MSG_BODY])
+                                  print(
+                                      f'REJECTING due to bad data or timeout: {record["DATA_SOURCE"]} : {record["RECORD_ID"]}'
+                                  )
+                                  ch.basic_reject(
+                                      msg[TUPLE_MSG][MSG_FRAME].delivery_tag,
+                                      requeue=False,
+                                  )
 
                             messages += 1
 
