@@ -221,9 +221,9 @@ try:
                                     print(
                                         f"All {executor._max_workers} threads are stuck on long running records"
                                     )
-                                if numRejected >= executor._max_workers:
-                                    print(f"Running recovery")
-                                    ch.basic_recover()  # supposedly this causes unacked messages to redeliver, should prevent the server from disconnecting us
+                                #if numRejected >= executor._max_workers:
+                                #    print(f"Running recovery")
+                                #    ch.basic_recover()  # supposedly this causes unacked messages to redeliver, should prevent the server from disconnecting us
 
                     # Really want something that forces an "I'm alive" to the server
                     pauseSeconds = governor.govern()
@@ -240,9 +240,9 @@ try:
 
                     while len(futures) < executor._max_workers:
                         try:
-                            msg = ch.basic_get(args.queue)
+                            msg = next(ch.consume(args.queue,inactivity_timeout=10))
                             # print(msg)
-                            if not msg[MSG_FRAME]:
+                            if not msg or not msg[MSG_FRAME]:
                                 if len(futures) == 0:
                                     conn.sleep(0.1)
                                 break
