@@ -225,14 +225,15 @@ try:
                                 #    print(f"Running recovery")
                                 #    ch.basic_recover()  # supposedly this causes unacked messages to redeliver, should prevent the server from disconnecting us
 
+                    if len(futures) >= executor._max_workers:
+                        conn.sleep(1)  # process rabbitmq protocol for 1s
+                        continue
+
                     # Really want something that forces an "I'm alive" to the server
                     pauseSeconds = governor.govern()
                     # either governor fully triggered or our executor is full
                     # not going to get more messages
                     if pauseSeconds < 0.0:
-                        conn.sleep(1)  # process rabbitmq protocol for 1s
-                        continue
-                    if len(futures) >= executor._max_workers:
                         conn.sleep(1)  # process rabbitmq protocol for 1s
                         continue
                     if pauseSeconds > 0.0:
