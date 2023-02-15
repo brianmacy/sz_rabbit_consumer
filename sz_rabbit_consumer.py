@@ -124,6 +124,7 @@ try:
         ch.queue_declare(queue=args.queue, passive=True)
 
         with concurrent.futures.ThreadPoolExecutor(max_workers) as executor:
+            print(f"Threads: {executor._max_workers}")
             futures = {}
             try:
                 ch.basic_qos(
