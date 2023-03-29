@@ -114,8 +114,8 @@ try:
     g2.init("sz_rabbit_consumer", engine_config, args.debugTrace)
     logCheckTime = prevTime = time.time()
 
-    senzing_governor = importlib.import_module("senzing_governor")
-    governor = senzing_governor.Governor(hint="sz_rabbit_consumer")
+    #senzing_governor = importlib.import_module("senzing_governor")
+    #governor = senzing_governor.Governor(hint="sz_rabbit_consumer")
 
     params = pika.URLParameters(args.url)
     with pika.BlockingConnection(params) as conn:
@@ -231,7 +231,7 @@ try:
                         continue
 
                     # Really want something that forces an "I'm alive" to the server
-                    pauseSeconds = governor.govern()
+                    pauseSeconds = 0.0 #governor.govern()
                     # either governor fully triggered or our executor is full
                     # not going to get more messages
                     if pauseSeconds < 0.0:
