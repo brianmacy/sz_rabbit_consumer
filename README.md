@@ -3,7 +3,7 @@
 # Overview
 Simple parallel JSON data processor using the Senzing API and is meant to provide developers with a simple starting point for a simple, scalable addRecord processor.
 
-It is a limited function [more or less] drop in replacement for the senzing/stream-loader when used for RabbitMQ.  The latest code requires Senzing 3.5, currently in pre-release.
+It is a limited function [more or less] drop in replacement for the senzing/stream-loader when used for RabbitMQ.  The latest code requires Senzing 3.5 or newer.
 
 # API demonstrated
 ### Core
