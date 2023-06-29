@@ -11,7 +11,7 @@ LABEL Name="brain/sz_rabbit_consumer" \
       Version="DEV"
 
 RUN apt-get update \
- && apt-get -y install curl python3 python3-pip python3-pika unzip libaio1 \
+ && apt-get -y install curl python3 python3-pip python3-pika \
  && python3 -mpip install orjson \
  && apt-get -y remove build-essential python3-pip \
  && apt-get -y autoremove \
@@ -19,14 +19,7 @@ RUN apt-get update \
 
 COPY sz_rabbit_consumer.py /app/
 
-RUN curl -X GET \
-      --output /tmp/instantclient-basic-linuxx64.zip \
-      https://download.oracle.com/otn_software/linux/instantclient/instantclient-basic-linuxx64.zip
-
-RUN unzip /tmp/instantclient-basic-linuxx64.zip -d /app
-
 ENV PYTHONPATH=/opt/senzing/g2/sdk/python:/app
-ENV LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:/app/instantclient_21_9/
 
 USER 1001
 
