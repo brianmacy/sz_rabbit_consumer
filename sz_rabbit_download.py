@@ -11,6 +11,8 @@ import time
 import random
 import pika
 
+from werkzeug.utils import secure_filename
+
 INTERVAL = 1000
 
 MSG_FRAME = 0
@@ -58,7 +60,7 @@ try:
 
     params = pika.URLParameters(args.url)
     with pika.BlockingConnection(params) as conn:
-        with open(args.output, "a") as fpOut:
+        with open(secure_filename(args.output), "a") as fpOut:
             messages = 0
             ch = conn.channel()
             ch.queue_declare(queue=args.queue, passive=True)
